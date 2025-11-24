@@ -3,11 +3,6 @@
 #include <atomic>
 
 using namespace std; 
-#include <iostream>
-#include <memory>
-#include <atomic>
-
-using namespace std; 
 
 template<typename T>
 class LockFreeQueueLinkedList {
@@ -23,13 +18,13 @@ class LockFreeQueueLinkedList {
         Node *dummy; 
 
     public: 
-        LockFreeQueue() {
+        LockFreeQueueLinkedList() {
             dummy = new Node(T{}); 
             tail.store(dummy); // so that head & tail != NULL
             head.store(dummy); 
         }
 
-        ~LockFreeQueue() {
+        ~LockFreeQueueLinkedList() {
             while(dummy != nullptr) {
                 Node *next = dummy->next; 
                 delete dummy;
@@ -82,19 +77,19 @@ class LockFreeQueueLinkedList {
 };
 
 
-template<typename T> 
+template<typename T, const size_t queueSize = 1000> 
 class LockFreeQueueArray {
     private: 
-        T *arr = new T[100];
+        T *arr = new T[queueSize];
         atomic<size_t> head, tail;
 
     public: 
-        LockFreeQueue() {
+        LockFreeQueueArray() {
             head.store(0); 
             tail.store(0); 
         }
 
-        ~LockFreeQueue() {
+        ~LockFreeQueueArray() {
             delete[] arr;
         }
  
@@ -116,7 +111,7 @@ class LockFreeQueueArray {
             size_t currHead, nextHead;
             
             while(true) {
-                currHead = head.load();
+                currHead = head.load(); 
                 nextHead = currHead + 1; 
 
                 if(currHead == tail.load())
@@ -127,13 +122,5 @@ class LockFreeQueueArray {
                     return true;
                 }
             }
-        }
-
-        void test() {
-            cout << "head: " << head.load() << "\ntail: " << tail.load() << endl;
-            for(int i = head.load(); i < tail.load(); i++) 
-                cout << arr[i] << endl;
-
-            cout << endl; 
         }
 }; 
