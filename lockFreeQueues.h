@@ -1,6 +1,7 @@
 #include <iostream>
 #include <memory>
 #include <atomic>
+#include <mutex>
 
 using namespace std; 
 
@@ -77,11 +78,32 @@ class LockFreeQueueLinkedList {
 };
 
 
-template<typename T, const size_t queueSize = 1000> 
+template<typename T, size_t startCapacity = 1000> 
 class LockFreeQueueArray {
-    private: 
-        T *arr = new T[queueSize];
+    private:
+        T *arr = new T[startCapacity];
+        size_t capacity = startCapacity; 
         atomic<size_t> head, tail;
+        mutex mtx; 
+
+        ///BUG
+        void resize_arr(const size_t size) {
+            capacity = size; 
+            T *newArr = new T[capacity];
+
+            for(int i = head; i < tail; i++) 
+                newArr[i - head] = arr[i];
+
+            delete[] arr; 
+
+            tail.store(tail - head); 
+            head.store(0);
+
+            // cout << "tail: " << tail.load() << endl << "head: " << head.load() << endl;
+ 
+            arr = newArr;
+        }
+        ///BUG
 
     public: 
         LockFreeQueueArray() {
@@ -94,8 +116,16 @@ class LockFreeQueueArray {
         }
  
         void push(const T &val) {
+            ///BUG
+            if(tail.load() >= capacity) {
+                mtx.lock(); 
+                resize_arr(capacity * 2); 
+                mtx.unlock();
+            }
+            ///BUG
+
             size_t currTail, nextTail;
-            
+
             while(true) {
                 currTail = tail.load();
                 nextTail = currTail + 1;
@@ -122,5 +152,55 @@ class LockFreeQueueArray {
                     return true;
                 }
             }
+        }
+
+        void test(int size) {
+            // for(int i = 0; i < size; i++) 
+            //     cout << arr[i] << endl;
+
+            int f = 0;
+            bool found = false;  
+            while(true) {        
+                for(int i = 0; i < size; i++) {
+                    if(arr[i] == f) {
+                        f++; 
+                        cout << "found: " << f << endl; 
+                        found = true; 
+                        break; 
+                    }
+                }
+
+                if(f == size - 1) {
+                    cout << "found all" << endl;
+                    break; 
+                }
+                else if(!found) {
+                    cout << endl << "error run: " << endl
+                         << "head: " << head.load() << endl  
+                         << "tail: " << tail.load() << endl 
+                         << "capacity: " << capacity << endl;
+                         
+                    for(int i = 0; i < size; i++) {
+                        if(arr[i] == f + 1) {
+                            f++; 
+                            cout << "f + 1 found: " << f + 1 << endl; 
+                            found = true; 
+                            return; 
+                        }
+
+                        //3885, 8165, 8107 => resize bug
+                    }
+
+                    cout << "f + 1 not found :(" << endl; 
+                    return;
+                }
+
+                found = false;
+            } 
+
+            cout << "end" << endl;
+
+            
+            // cout << tail.load() << endl; 
         }
 }; 
