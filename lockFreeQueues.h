@@ -40,10 +40,8 @@ class LockFreeQueueLinkedList {
                 currTail = tail.load(); 
                 Node *currTailNext = currTail->next; //need this because compare_exchange_weak doesnt like L-Values
 
-                if(currTailNext != nullptr) { //not actual last node
-                    tail.compare_exchange_weak(currTail, currTailNext); //advance through list to get to last node (tail)
+                if(currTailNext != nullptr || currTail != tail.load()) //not actual last node
                     continue;
-                }
                 
                 if(currTail->next.compare_exchange_weak(currTailNext, newNode)) //set currTail->next = newNode
                     break;                                                      //to make the queue a linked list
@@ -54,68 +52,34 @@ class LockFreeQueueLinkedList {
         }
 
         bool pop(T &val) {
-            Node *currHead = head.load(),
-                 *nextHead = currHead->next;
+            Node *currHead,
+                 *nextHead; 
 
             while(true) {
+                currHead = head.load(); 
+                nextHead = currHead->next;
+
                 if(currHead == tail.load())
                     return false; //queue empty, nothing to pop
              
-                if(currHead != head.load()) { //head hanging behind/lagging, advance though list
-                    head.compare_exchange_weak(currHead, nextHead);
+                if(currHead != head.load()) //head changed, reload
                     continue; 
-                }
-                
-                //head found, pop and set data
+
+                //head correct: pop and set data
                 val = nextHead->data;
                 head.compare_exchange_weak(currHead, nextHead);
                 return true;
             }
         }
 
-        void test(int size) {
-            Node *tmp; 
-            int f = 0;
-            bool found = false;  
-            while(true) {        
-                tmp = head.load(); 
-                while(tmp != nullptr) {
-                    if(tmp->data == f) {
-                        f++; 
-                        cout << "found: " << f << endl; 
-                        found = true; 
-                        break; 
-                    }
 
-                    tmp = tmp->next; 
-                }
+        ///testing 
+        Node *get_head() {
+            return head.load(); 
+        }
 
-                if(f == size - 1) {
-                    cout << "found all" << endl;
-                    break; 
-                }
-                else if(!found) {
-                    tmp = head.load(); 
-                    cout << endl << "error run: " << endl; 
-
-                    while(tmp != nullptr) {
-                        if(tmp->data == f + 1) {
-                            f++; 
-                            cout << "f + 1 found: " << f + 1 << endl; 
-                            found = true; 
-                            return; 
-                        }
-
-                        tmp = tmp->next; 
-                        //3885, 8165, 8107 => resize bug
-                    }
-
-                    cout << "f + 1 not found :(" << endl; 
-                    return;
-                }
-
-                found = false;
-            }
+        Node *get_tail() {
+            return tail.load(); 
         }
 };
 
@@ -129,8 +93,8 @@ class LockFreeQueueArray {
         bool resizing = false; 
 
         //create new array with new size, copy old array, delete old array, set old = new
-        void resize_arr(const size_t size) {
-            capacity = size; 
+        void resize_arr(const size_t newSize) {
+            capacity = newSize; 
             T *newArr = new T[capacity];
 
             for(int i = head; i < tail; i++) 
@@ -158,7 +122,7 @@ class LockFreeQueueArray {
             //to be honest, im not sure if this is thread safe, because, if multiple threads are exactly head to head
             //i think all could go through the if, before resizing = false... => will test it (somehow -_-)
             if(tail.load() >= capacity && !resizing) { //!resizing gets checked so only one thread at a time does the resizing
-                resizing = true; //stop other threads from changing array while rearraynging (good one huh?) it
+                resizing = true; //stop other threads from changing array while rearraynging (good one huh?)
                 resize_arr(capacity * 2);
                 resizing = false;
             }
