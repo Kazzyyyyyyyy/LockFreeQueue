@@ -1,7 +1,6 @@
 #include <iostream>
 #include <memory>
 #include <atomic>
-#include <mutex>
 
 using namespace std; 
 
@@ -67,13 +66,56 @@ class LockFreeQueueLinkedList {
                     continue; 
                 }
                 
-                //head found, pop and return data
+                //head found, pop and set data
                 val = nextHead->data;
                 head.compare_exchange_weak(currHead, nextHead);
-                break;
+                return true;
             }
+        }
 
-            return true;
+        void test(int size) {
+            Node *tmp; 
+            int f = 0;
+            bool found = false;  
+            while(true) {        
+                tmp = head.load(); 
+                while(tmp != nullptr) {
+                    if(tmp->data == f) {
+                        f++; 
+                        cout << "found: " << f << endl; 
+                        found = true; 
+                        break; 
+                    }
+
+                    tmp = tmp->next; 
+                }
+
+                if(f == size - 1) {
+                    cout << "found all" << endl;
+                    break; 
+                }
+                else if(!found) {
+                    tmp = head.load(); 
+                    cout << endl << "error run: " << endl; 
+
+                    while(tmp != nullptr) {
+                        if(tmp->data == f + 1) {
+                            f++; 
+                            cout << "f + 1 found: " << f + 1 << endl; 
+                            found = true; 
+                            return; 
+                        }
+
+                        tmp = tmp->next; 
+                        //3885, 8165, 8107 => resize bug
+                    }
+
+                    cout << "f + 1 not found :(" << endl; 
+                    return;
+                }
+
+                found = false;
+            }
         }
 };
 
@@ -84,9 +126,9 @@ class LockFreeQueueArray {
         T *arr = new T[startCapacity];
         size_t capacity = startCapacity; 
         atomic<size_t> head, tail;
-        mutex mtx; 
+        bool resizing = false; 
 
-        ///BUG
+        //create new array with new size, copy old array, delete old array, set old = new
         void resize_arr(const size_t size) {
             capacity = size; 
             T *newArr = new T[capacity];
@@ -99,11 +141,8 @@ class LockFreeQueueArray {
             tail.store(tail - head); 
             head.store(0);
 
-            // cout << "tail: " << tail.load() << endl << "head: " << head.load() << endl;
- 
             arr = newArr;
         }
-        ///BUG
 
     public: 
         LockFreeQueueArray() {
@@ -116,21 +155,22 @@ class LockFreeQueueArray {
         }
  
         void push(const T &val) {
-            ///BUG
-            if(tail.load() >= capacity) {
-                mtx.lock(); 
-                resize_arr(capacity * 2); 
-                mtx.unlock();
+            //to be honest, im not sure if this is thread safe, because, if multiple threads are exactly head to head
+            //i think all could go through the if, before resizing = false... => will test it (somehow -_-)
+            if(tail.load() >= capacity && !resizing) { //!resizing gets checked so only one thread at a time does the resizing
+                resizing = true; //stop other threads from changing array while rearraynging (good one huh?) it
+                resize_arr(capacity * 2);
+                resizing = false;
             }
-            ///BUG
 
             size_t currTail, nextTail;
 
             while(true) {
                 currTail = tail.load();
                 nextTail = currTail + 1;
-
-                if(tail.compare_exchange_weak(currTail, nextTail)) {
+ 
+                //push val if not currently resizing array
+                if(!resizing && tail.compare_exchange_weak(currTail, nextTail)) {
                     arr[currTail] = val;
                     break;
                 }
@@ -144,10 +184,12 @@ class LockFreeQueueArray {
                 currHead = head.load(); 
                 nextHead = currHead + 1; 
 
+                //queue empty, nothing to pop
                 if(currHead == tail.load())
                     return false; 
 
-                if(head.compare_exchange_weak(currHead, nextHead)) {
+                //pop if not currently resizing array, set &val = value and finish (return)
+                if(!resizing && head.compare_exchange_weak(currHead, nextHead)) {
                     val = arr[currHead];
                     return true;
                 }
