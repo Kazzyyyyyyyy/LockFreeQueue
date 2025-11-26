@@ -291,20 +291,25 @@ class LockFreeQueueLinkedListTest {
             else 
                 errorTests++; 
         }
+        
+        int random_int(int min, int max) {
+            static random_device rd;
+            static mt19937 gen(rd());
+            uniform_int_distribution<> dist(min, max);
+            return dist(gen);
+        }
 
         int currTime; 
         void run_silent_tests() {
             auto start = high_resolution_clock::now();
             string clear(100, '\n');
-            srand(time(0));
 
             for(int i = 0; i < 5; i++) {
                 errorSafe.push_back({});
             }
 
             while(true) {
-                ///change, rand() is bad 
-                threadAmnt = rand() % 500000; 
+                threadAmnt = random_int(5000, 500000);
                 
                 auto curr = high_resolution_clock::now();
                 auto m = duration_cast<minutes>(curr - start).count();
@@ -312,7 +317,7 @@ class LockFreeQueueLinkedListTest {
                 currTime = m; 
 
                 cout << clear 
-                     << "(run after print)" << endl
+                     << "(run after print) DONT STRG + C!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl
                      << "curr threads: " << threadAmnt << endl << endl 
                      << "working: " << workingTests << endl 
                      << "error: " << errorTests << endl << endl 
