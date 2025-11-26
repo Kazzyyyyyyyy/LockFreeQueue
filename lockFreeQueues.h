@@ -16,6 +16,9 @@ class LockFreeQueueLinkedList {
 
         atomic<Node*> head, tail; 
         Node *dummy; 
+    
+        ///testing 
+        size_t returnPops = 0; 
 
     public: 
         LockFreeQueueLinkedList() {
@@ -33,47 +36,62 @@ class LockFreeQueueLinkedList {
         }
 
         void push(const T &val) {
-            Node *newNode = new Node(val), //node we want to add
-                 *currTail;
+            Node *newNode = new Node(val), 
+                 *currTail; 
 
             while(true) {
                 currTail = tail.load(); 
-                Node *currTailNext = currTail->next; //need this because compare_exchange_weak doesnt like L-Values
+                Node *nextTail = currTail->next; //compare_exchange_weak doesnt like L values
 
-                if(currTailNext != nullptr || currTail != tail.load()) //not actual last node
-                    continue;
-                
-                if(currTail->next.compare_exchange_weak(currTailNext, newNode)) //set currTail->next = newNode
-                    break;                                                      //to make the queue a linked list
+                if(currTail != tail.load() || nextTail != nullptr)
+                    continue; 
+
+                if(currTail->next.compare_exchange_weak(nextTail, newNode)) { //set currTail->next = newNode
+                    tail.compare_exchange_weak(currTail, newNode); //advance tail to newNode
+                    return; 
+                }
             }
-
-            //set tail = newNode: push finished, node added
-            tail.compare_exchange_weak(currTail, newNode);
         }
 
         bool pop(T &val) {
             Node *currHead,
-                 *nextHead; 
+                 *nextHead;
 
             while(true) {
                 currHead = head.load(); 
-                nextHead = currHead->next;
+                nextHead = currHead->next; 
+                
+                if(currHead == tail.load() || nextHead == nullptr) { //queue empty 
+                    returnPops++; 
+                    return false; //for test single bla bla, this can cause an "error" even though its normal behaviour and absolutely ok
+                }
 
-                if(currHead == tail.load())
-                    return false; //queue empty, nothing to pop
-             
-                if(currHead != head.load()) //head changed, reload
-                    continue; 
-
-                //head correct: pop and set data
-                val = nextHead->data;
-                head.compare_exchange_weak(currHead, nextHead);
-                return true;
+                if(currHead == head.load()) {
+                    if(head.compare_exchange_weak(currHead, nextHead)) {
+                        val = nextHead->data; //currHead is the dummy => holds value T{}
+                        return true; 
+                    }
+                }
             }
         }
 
-
         ///testing 
+        size_t size() {
+            Node *currHead = head.load(); 
+
+            size_t num = 0; 
+            while(currHead->next != nullptr) {
+                currHead = currHead->next; 
+                num++; 
+            }
+
+            return num; 
+        }
+
+        size_t get_return_pops() {
+            return returnPops;
+        }
+
         Node *get_head() {
             return head.load(); 
         }
@@ -158,55 +176,5 @@ class LockFreeQueueArray {
                     return true;
                 }
             }
-        }
-
-        void test(int size) {
-            // for(int i = 0; i < size; i++) 
-            //     cout << arr[i] << endl;
-
-            int f = 0;
-            bool found = false;  
-            while(true) {        
-                for(int i = 0; i < size; i++) {
-                    if(arr[i] == f) {
-                        f++; 
-                        cout << "found: " << f << endl; 
-                        found = true; 
-                        break; 
-                    }
-                }
-
-                if(f == size - 1) {
-                    cout << "found all" << endl;
-                    break; 
-                }
-                else if(!found) {
-                    cout << endl << "error run: " << endl
-                         << "head: " << head.load() << endl  
-                         << "tail: " << tail.load() << endl 
-                         << "capacity: " << capacity << endl;
-                         
-                    for(int i = 0; i < size; i++) {
-                        if(arr[i] == f + 1) {
-                            f++; 
-                            cout << "f + 1 found: " << f + 1 << endl; 
-                            found = true; 
-                            return; 
-                        }
-
-                        //3885, 8165, 8107 => resize bug
-                    }
-
-                    cout << "f + 1 not found :(" << endl; 
-                    return;
-                }
-
-                found = false;
-            } 
-
-            cout << "end" << endl;
-
-            
-            // cout << tail.load() << endl; 
         }
 }; 
