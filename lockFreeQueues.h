@@ -110,6 +110,10 @@ class LockFreeQueueArray {
         atomic<size_t> head, tail;
         bool resizing = false; 
 
+        ///testing 
+        uint8_t resizeCount = 0; 
+        size_t returnPops = 0; 
+
         //create new array with new size, copy old array, delete old array, set old = new
         void resize_arr(const size_t newSize) {
             capacity = newSize; 
@@ -143,6 +147,9 @@ class LockFreeQueueArray {
                 resizing = true; //stop other threads from changing array while rearraynging (good one huh?)
                 resize_arr(capacity * 2);
                 resizing = false;
+        
+                ///testing 
+                resizeCount++;
             }
 
             size_t currTail, nextTail;
@@ -167,8 +174,10 @@ class LockFreeQueueArray {
                 nextHead = currHead + 1; 
 
                 //queue empty, nothing to pop
-                if(currHead == tail.load())
+                if(currHead == tail.load()) {
+                    returnPops++; 
                     return false; 
+                }
 
                 //pop if not currently resizing array, set &val = value and finish (return)
                 if(!resizing && head.compare_exchange_weak(currHead, nextHead)) {
@@ -176,5 +185,31 @@ class LockFreeQueueArray {
                     return true;
                 }
             }
+        }
+
+
+        ///testing 
+        int *get_array() {
+            return arr; 
+        }
+
+        size_t get_head() {
+            return head.load(); 
+        }
+        
+        size_t get_tail() {
+            return tail.load(); 
+        }
+
+        size_t get_capacity() {
+            return capacity; 
+        }
+        
+        uint8_t get_resizes() {
+            return resizeCount; 
+        }
+
+        size_t get_return_pops() {
+            return returnPops;
         }
 }; 

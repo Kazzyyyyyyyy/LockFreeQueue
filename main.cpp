@@ -6,7 +6,7 @@
 using namespace std; 
 
 int main() {
-    LockFreeQueueLinkedListTest qt; 
+    LockFreeQueueArrayTest qt; 
     qt.run_tests_loop();
 
     return 0; 
