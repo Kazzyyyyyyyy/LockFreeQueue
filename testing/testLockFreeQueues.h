@@ -16,6 +16,9 @@ class LockFreeQueueLinkedList {
 
         atomic<Node*> head, tail; 
         Node *dummy; 
+    
+        ///testing 
+        size_t returnPops = 0; 
 
     public: 
         LockFreeQueueLinkedList() {
@@ -58,19 +61,45 @@ class LockFreeQueueLinkedList {
                 currHead = head.load(); 
                 nextHead = currHead->next; 
                 
-                if(currHead == tail.load() || nextHead == nullptr) //queue empty 
-                    return false; 
+                if(currHead == tail.load() || nextHead == nullptr) { //queue empty 
+                    returnPops++; 
+                    return false; //for test single bla bla, this can cause an "error" even though its normal behaviour and absolutely ok
+                }
 
                 if(currHead == head.load()) {
                     if(head.compare_exchange_weak(currHead, nextHead)) {
-                        val = nextHead->data; //currHead is the dummy => holds value T{}, so nextHead is the one we looking for
+                        val = nextHead->data; //currHead is the dummy => holds value T{}
                         return true; 
                     }
                 }
             }
         }
-};
 
+        ///testing 
+        size_t size() {
+            Node *currHead = head.load(); 
+
+            size_t num = 0; 
+            while(currHead->next != nullptr) {
+                currHead = currHead->next; 
+                num++; 
+            }
+
+            return num; 
+        }
+
+        size_t get_return_pops() {
+            return returnPops;
+        }
+
+        Node *get_head() {
+            return head.load(); 
+        }
+
+        Node *get_tail() {
+            return tail.load(); 
+        }
+};
 
 
 template<typename T, size_t startCapacity = 10000>
@@ -79,7 +108,11 @@ class LockFreeQueueArray {
         T *arr = new T[startCapacity];
         size_t capacity = startCapacity; 
         atomic<size_t> head, tail;
-        bool resizing = false;
+        bool resizing = false; 
+
+        ///testing 
+        uint8_t resizeCount = 0; 
+        size_t returnPops = 0; 
 
         //create new array with new size, copy old array, delete old array, set old = new
         void resize_arr(const size_t newSize) {
@@ -108,10 +141,15 @@ class LockFreeQueueArray {
         }
  
         void push(const T &val) {
+            //to be honest, im not sure if this is thread safe, because, if multiple threads are exactly head to head
+            //i think all could go through the if, before resizing = false... => will test it (somehow -_-)
             if(tail.load() >= capacity && !resizing) { //!resizing gets checked so only one thread at a time does the resizing
                 resizing = true; //stop other threads from changing array while rearraynging (good one huh?)
                 resize_arr(capacity * 2);
                 resizing = false;
+        
+                ///testing 
+                resizeCount++;
             }
 
             size_t currTail, nextTail;
@@ -120,7 +158,7 @@ class LockFreeQueueArray {
                 currTail = tail.load();
                 nextTail = currTail + 1;
  
-                //push val if not currently resizing array and currTail didnt change
+                //push val if not currently resizing array
                 if(!resizing && tail.compare_exchange_weak(currTail, nextTail)) {
                     arr[currTail] = val;
                     break;
@@ -136,8 +174,10 @@ class LockFreeQueueArray {
                 nextHead = currHead + 1; 
 
                 //queue empty, nothing to pop
-                if(currHead == tail.load()) 
+                if(currHead == tail.load()) {
+                    returnPops++; 
                     return false; 
+                }
 
                 //pop if not currently resizing array, set &val = value and finish (return)
                 if(!resizing && head.compare_exchange_weak(currHead, nextHead)) {
@@ -145,5 +185,31 @@ class LockFreeQueueArray {
                     return true;
                 }
             }
+        }
+
+
+        ///testing 
+        int *get_array() {
+            return arr; 
+        }
+
+        size_t get_head() {
+            return head.load(); 
+        }
+        
+        size_t get_tail() {
+            return tail.load(); 
+        }
+
+        size_t get_capacity() {
+            return capacity; 
+        }
+        
+        uint8_t get_resizes() {
+            return resizeCount; 
+        }
+
+        size_t get_return_pops() {
+            return returnPops;
         }
 }; 
