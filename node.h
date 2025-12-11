@@ -5,7 +5,7 @@ template<typename T>
 class Node {
     public: 
         T val; 
-        atomic<Pointer<T>> next; 
+        atomic<Pointer<T>> next;
 
         Node() {
             next.store(Pointer<T>(nullptr, 0));
