@@ -1,9 +1,9 @@
 #include "node.h"
 #include <atomic>
 
-using namespace std;
+// #define TESTING
 
-#define TESTING
+using namespace std; 
 
 template<typename T> 
 class LockFreeQueue { 
@@ -36,7 +36,7 @@ class LockFreeQueue {
             Pointer<T> get_head() const { return head.load(); }
             Pointer<T> get_tail() const { return tail.load(); }
             
-            uint32_t size() {
+            const uint32_t size() {
                 Pointer<T> currHead = tail.load().ptr->next; //start at '->next' because the dummy doesnt count
                 
                 uint32_t s = 0; 
@@ -55,7 +55,7 @@ class LockFreeQueue {
 
             while(true) { // logic is in a loop to make retries possible, because the success of a push attempt is not guaranteed
                 currTail = tail.load(); // load 'tail' at every start of a push attempt
-                Pointer<T> nextTail = currTail.ptr->next.load(); // node after 'tail' (should be nullptr)
+                Pointer<T> nextTail = currTail.ptr->next.load(); // node after 'tail' should be nullptr
 
                 if(currTail == tail.load()) { // 'tail' is consistent?
                     if(nextTail.ptr == nullptr) { // 'tail' is actually the last node and 'nextTail' is nullptr?

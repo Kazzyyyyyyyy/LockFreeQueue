@@ -11,7 +11,7 @@ class Node {
             next.store(Pointer<T>(nullptr, 0));
         }
 
-        Node(const T& v) {
+        explicit Node(const T& v) {
             val = v; 
             next.store(Pointer<T>(nullptr, 0)); 
         }

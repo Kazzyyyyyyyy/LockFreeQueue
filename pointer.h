@@ -11,7 +11,7 @@ class Pointer {
         Node<T> *ptr;
         uint64_t count; 
 
-        Pointer() = default; 
+        Pointer() = default; // use default constructor
 
         Pointer(Node<T> *newPtr, const uint64_t newCount) {
             ptr = newPtr; 

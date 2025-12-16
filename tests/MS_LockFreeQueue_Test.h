@@ -8,7 +8,7 @@
 #include <thread> 
 #include <fstream>
 
-#include "../MScottLockFreeQueue.h"
+#include "../MS_LockFreeQueue.h"
 
 using namespace std; 
 using namespace chrono; 
@@ -35,17 +35,21 @@ class TestState {
                 errorSafe.push_back({});
         }
 
-        const uint16_t get_working_tests() const {
+        const inline uint16_t get_working_tests() const {
             return workingTests; 
         }
         
-        const uint16_t get_error_tests() const {
+        const inline uint16_t get_error_tests() const {
             return workingTests; 
         }
     
-        void increase_count(const bool working) {
+        inline void increase_count(const bool working) {
             if(working) workingTests++;
             else        errorTests++;
+        }
+        
+        const inline string get_total_tests() const {
+            return to_string((workingTests + errorTests) / TESTS_SIZE); 
         }
 
 
@@ -62,9 +66,6 @@ class TestState {
             return to_string(((double)duration_cast<minutes>(high_resolution_clock::now() - startTime).count() / 60));
         }
  
-        const inline string get_total_tests() const {
-            return to_string((workingTests + errorTests) / TESTS_SIZE); 
-        }
 
         //prints
         const string default_print(const uint32_t currThreadAmnt) const {
@@ -135,7 +136,7 @@ class TestState {
         }
 
 
-        //error prints 
+        //errors 
         void safe_st_push_error(const uint32_t failedAt, const uint32_t queueSize) {
             const string s =    "failed at num: " + to_string(failedAt) + 
                                 "\nqueue size: " + to_string(queueSize) + 
@@ -237,19 +238,11 @@ class TestState {
 }; 
 
 
+
 template<const uint32_t DEFAULT_THREAD_AMNT = 10'000>
 class LockFreeQueueTests { 
     private:
         TestState state;
-    
-        //queue node
-        struct Node {
-            const uint32_t data;
-            atomic<Node*> next; 
-
-            Node(const uint32_t &val) : data(val), next(nullptr) {}
-        }; 
-        
         
         //utils
         const inline uint32_t random_thread_count(const uint32_t min, const uint32_t max) const {
@@ -285,7 +278,7 @@ class LockFreeQueueTests {
 
         //singlethread tests 
         const bool st_test_push(const uint32_t threadAmnt) {
-            auto *q = new LockFreeQueue<uint32_t>;
+            unique_ptr<LockFreeQueue<uint32_t>> q(new LockFreeQueue<uint32_t>); 
             for(int i = 0; i < threadAmnt; i++) {
                 q->push(i); 
             }
@@ -308,18 +301,16 @@ class LockFreeQueueTests {
 
                 if(!foundNum) { //num not found => error in push
                     state.safe_st_push_error(num, q->size());
-                    delete q; 
                     return false;
                 }
             }
 
             //no error => working
-            delete q; 
             return true;
         }
 
         const bool st_test_pop(const uint32_t threadAmnt) {
-            auto *q = new LockFreeQueue<uint32_t>;
+            unique_ptr<LockFreeQueue<uint32_t>> q(new LockFreeQueue<uint32_t>); 
             
             for(int i = 0; i < threadAmnt; i++) {
                 q->push(i); 
@@ -338,17 +329,15 @@ class LockFreeQueueTests {
                 
                 //not all values got popped 
                 state.safe_st_pop_error(num, v.size(), q->size()); 
-                delete q; 
                 return false;
             }
             
             //all values correct
-            delete q; 
             return true; 
         }
         
         const bool st_test_empty_pop(const uint32_t threadAmnt) {
-            auto *q = new LockFreeQueue<uint32_t>; 
+            unique_ptr<LockFreeQueue<uint32_t>> q(new LockFreeQueue<uint32_t>); 
 
             vector<uint32_t> v(threadAmnt);
             for(int i = 0; i < threadAmnt; i++) {
@@ -356,12 +345,11 @@ class LockFreeQueueTests {
             }
 
             for(uint32_t num = 0; num < v.size(); num++) {
-                if(v[num] != 0) { //'v' gets initialized with all '0's, and because there are no values in queue to pop, 
+                if(v[num] != 0) { //'v' gets initialized with all '0's and because there are no values in queue to pop, 
                                   //all index's of 'v' should still be value '0'
 
                     const bool failedAtFirstCheck = true;
                     state.safe_st_empty_pop_error(failedAtFirstCheck, v.size(), q->size());
-                    delete q;
                     return false;
                 }
             }
@@ -373,15 +361,14 @@ class LockFreeQueueTests {
                 state.safe_st_empty_pop_error(failedAtFirstCheck, v.size(), q->size()); 
             }
 
-            delete q; 
             return working;
         }
 
 
         //multithread tests
         const bool mt_test_push(const uint32_t threadAmnt) {
-            auto *q = new LockFreeQueue<uint32_t>;
-            push_threads(q, threadAmnt);
+            unique_ptr<LockFreeQueue<uint32_t>> q(new LockFreeQueue<uint32_t>); 
+            push_threads(q.get(), threadAmnt);
 
             //check if pushed correctly
             bool foundNum;
@@ -401,21 +388,19 @@ class LockFreeQueueTests {
 
                 if(!foundNum) { //num not found => error in push
                     state.safe_mt_push_error(num, q->size(), threadAmnt);
-                    delete q; 
                     return false;
                 }
             }
 
             //no error => working
-            delete q; 
             return true;
         }
 
-        const bool mt_test_pop(const uint32_t threadAmnt) {
-            auto *q = new LockFreeQueue<uint32_t>;
+        const bool mt_test_pop(const uint32_t threadAmnt) {        
+            unique_ptr<LockFreeQueue<uint32_t>> q(new LockFreeQueue<uint32_t>); 
 
-            push_threads(q, threadAmnt);
-            vector<uint32_t> v = pop_threads(q, threadAmnt);
+            push_threads(q.get(), threadAmnt);
+            vector<uint32_t> v = pop_threads(q.get(), threadAmnt);
 
             sort(v.begin(), v.end()); //sort values, so check for value is O(1)
 
@@ -425,29 +410,27 @@ class LockFreeQueueTests {
                 
                 //not all values got popped 
                 state.safe_mt_pop_error(num, v.size(), q->size(), threadAmnt); 
-                delete q; 
                 return false; 
             }
             
             //all values correct
-            delete q; 
             return true; 
         }
 
         const bool mt_test_push_and_pop(const uint32_t threadAmnt) {
-            auto *q = new LockFreeQueue<uint32_t>; 
+            unique_ptr<LockFreeQueue<uint32_t>> q(new LockFreeQueue<uint32_t>); 
 
             //create threads
             vector<thread> pushThrs; 
             vector<thread> popThrs;
             
             for(uint32_t i = 0; i < threadAmnt; i++) 
-                pushThrs.push_back(thread(&LockFreeQueue<uint32_t>::push, q, i));
+                pushThrs.push_back(thread(&LockFreeQueue<uint32_t>::push, q.get(), i));
 
             //only half as many pops as pushes
             vector<uint32_t> popVals(threadAmnt); 
             for(uint32_t i = 0; i <= threadAmnt / 2; i++) 
-                popThrs.push_back(thread(&LockFreeQueue<uint32_t>::pop, q, ref(popVals[i])));
+                popThrs.push_back(thread(&LockFreeQueue<uint32_t>::pop, q.get(), ref(popVals[i])));
 
             //join
             for(uint32_t i = 0; i < threadAmnt; i++) {
@@ -486,20 +469,18 @@ class LockFreeQueueTests {
                     
                     if(!foundNum) { //'num' also not found in 'popVals' => error
                         state.safe_mt_push_and_pop_error(num, popVals.size(), q->size(), threadAmnt); 
-                        delete q; 
                         return false;
                     }
                 }
             }
 
-            delete q; 
             return true; 
         }
 
         const bool mt_test_empty_pop(const uint32_t threadAmnt) {
-            auto *q = new LockFreeQueue<uint32_t>; 
+            unique_ptr<LockFreeQueue<uint32_t>> q(new LockFreeQueue<uint32_t>); 
 
-            vector<uint32_t> v = pop_threads(q, threadAmnt); //pop without pushing
+            vector<uint32_t> v = pop_threads(q.get(), threadAmnt); //pop without pushing
 
             for(uint32_t num = 0; num < v.size(); num++) {
                 if(v[num] != 0) { //'v' gets initialized with all '0's, and because there are not values in queue to pop, 
@@ -507,7 +488,6 @@ class LockFreeQueueTests {
 
                     const bool failedAtFirstCheck = true;
                     state.safe_mt_empty_pop_error(failedAtFirstCheck, v.size(), q->size(), threadAmnt);
-                    delete q;
                     return false;
                 }
             }
@@ -519,24 +499,23 @@ class LockFreeQueueTests {
                 state.safe_mt_empty_pop_error(failedAtFirstCheck, v.size(), q->size(), threadAmnt); 
             }
 
-            delete q; 
             return working;
         }
 
         const bool mt_test_single_push_and_pop(const uint32_t threadAmnt) {
-            auto *q = new LockFreeQueue<uint32_t>; 
+            unique_ptr<LockFreeQueue<uint32_t>> q(new LockFreeQueue<uint32_t>); 
 
             //create threads
             vector<thread> pushThrs; 
             vector<thread> popThrs;
 
             for(uint32_t i = 0; i < threadAmnt; i++) 
-                pushThrs.push_back(thread(&LockFreeQueue<uint32_t>::push, q, i));
+                pushThrs.push_back(thread(&LockFreeQueue<uint32_t>::push, q.get(), i));
 
             //1:1 push and pop
             vector<uint32_t> popVals(threadAmnt); 
             for(uint32_t i = 0; i < threadAmnt; i++) 
-                popThrs.push_back(thread(&LockFreeQueue<uint32_t>::pop, q, ref(popVals[i])));
+                popThrs.push_back(thread(&LockFreeQueue<uint32_t>::pop, q.get(), ref(popVals[i])));
             
             //join
             for(uint32_t i = 0; i < threadAmnt; i++) {
@@ -551,7 +530,6 @@ class LockFreeQueueTests {
                 state.safe_mt_single_push_and_pop_error(popVals.size(), q->size(), threadAmnt); 
             }
 
-            delete q;
             return working;
         }
 
@@ -561,7 +539,7 @@ class LockFreeQueueTests {
             state.start_clock();
 
             while(true) {
-                threadAmnt = random_thread_count(5'000, 50'000/*500'000*/);
+                threadAmnt = random_thread_count(5'000, 300'000); //random test-load
 
                 cout << state.default_print(threadAmnt) << endl; 
 
@@ -582,7 +560,7 @@ class LockFreeQueueTests {
         void wait_for_exit() {
             cin.get(); //input => exit
             
-            const string printTo = "C:\\Users\\staer\\Desktop\\LockFreeQueueReports\\lfqueue-report.txt"; //add txt file to print 'tests_finished_print()' to
+            const string printTo = ""; //add txt file to print 'tests_finished_print()' to
             
             cout << string(100, '\n') << state.tests_finished_print() << endl << endl << "print to: " << printTo;
             
@@ -611,8 +589,8 @@ class LockFreeQueueTests {
         }
 
         void run_tests_loop() {
+            thread exitThread(&LockFreeQueueTests::wait_for_exit, this); // reserve 1 thread to guarantee clean exit
             thread testThread(&LockFreeQueueTests::tests_loop, this, DEFAULT_THREAD_AMNT);
-            thread exitThread(&LockFreeQueueTests::wait_for_exit, this);
             
             testThread.join();
             exitThread.join(); 
